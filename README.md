@@ -129,7 +129,6 @@ Social Media Links:
 · 📘 Facebook: https://www.facebook.com/md.norman.988
 · 💬 WhatsApp Group: https://chat.whatsapp.com/L0Y71TSqNd55sFkwpIOMyH
 · 📢 WhatsApp Channel: https://whatsapp.com/channel/0029VbAkW0SATRSeAAYjNv1Z
-· 📺 YouTube: https://youtube.com/@FirewallBreaker
 
 ❓ Troubleshooting
 
